@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
 import { useAuth } from '@/hooks/useAuth'
@@ -16,8 +16,10 @@ import {
   Phone,
   FileText,
   Wrench,
+  ChevronDown,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { countries, getStatesForCountry, getCitiesForState } from '@/data/locations'
 
 export const Route = createFileRoute('/onboarding')({
   component: OnboardingPage,
@@ -60,12 +62,20 @@ function OnboardingFlow() {
 
   // Step 2 fields
   const [displayName, setDisplayName] = useState('')
-  const [country, setCountry] = useState('NG')
-  const [city, setCity] = useState('')
+  const [countryCode, setCountryCode] = useState('NG')
+  const [stateName, setStateName] = useState('')
+  const [cityName, setCityName] = useState('')
   const [phone, setPhone] = useState('')
   const [bio, setBio] = useState('')
   const [skills, setSkills] = useState('')
   const [skillTags, setSkillTags] = useState<string[]>([])
+
+  // Cascading dropdown data
+  const states = useMemo(() => getStatesForCountry(countryCode), [countryCode])
+  const cities = useMemo(
+    () => (stateName ? getCitiesForState(countryCode, stateName) : []),
+    [countryCode, stateName],
+  )
 
   if (isLoading) {
     return (
@@ -98,13 +108,16 @@ function OnboardingFlow() {
 
     setSubmitting(true)
     try {
+      // Build city string: "StateName, CityName" so both fit in the `city` column
+      const cityValue = stateName && cityName ? `${stateName}, ${cityName}` : cityName || stateName || ''
+
       // Create profile
       await createProfile.mutateAsync({
         userId: user.id,
         displayName: displayName || (user.displayName ?? 'User'),
         role,
-        country,
-        city,
+        country: countryCode,
+        city: cityValue,
         latitude: null,
         longitude: null,
         phone,
@@ -117,7 +130,7 @@ function OnboardingFlow() {
       // Create subscription with trial
       await createSubscription.mutateAsync({
         userId: user.id,
-        country,
+        country: countryCode,
         role,
       })
 
@@ -228,26 +241,65 @@ function OnboardingFlow() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="relative">
-                <Globe className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Country (e.g. NG)"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value.toUpperCase())}
-                  className="pl-10"
-                  maxLength={3}
+                <Globe className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none z-10" />
+                <select
+                  value={countryCode}
+                  onChange={(e) => {
+                    setCountryCode(e.target.value)
+                    setStateName('')
+                    setCityName('')
+                  }}
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent pl-10 pr-8 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none"
                   required
-                />
+                >
+                  {countries.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
               </div>
               <div className="relative">
-                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="City"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  className="pl-10"
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none z-10" />
+                <select
+                  value={stateName}
+                  onChange={(e) => {
+                    setStateName(e.target.value)
+                    setCityName('')
+                  }}
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent pl-10 pr-8 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none"
                   required
-                />
+                  disabled={states.length === 0}
+                >
+                  <option value="">State / Province</option>
+                  {states.map((s) => (
+                    <option key={s.name} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
               </div>
+            </div>
+
+            <div className="relative">
+              <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none z-10" />
+              <select
+                value={cityName}
+                onChange={(e) => setCityName(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-transparent pl-10 pr-8 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none"
+                required
+                disabled={cities.length === 0}
+              >
+                <option value="">City</option>
+                {cities.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
             </div>
 
             <div className="relative">

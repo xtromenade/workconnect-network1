@@ -18,6 +18,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppMessagesIndexRouteImport } from './routes/_app/messages/index'
 import { Route as AppJobsIndexRouteImport } from './routes/_app/jobs/index'
+import { Route as AppProfilesUserIdRouteImport } from './routes/_app/profiles/$userId'
 import { Route as AppMessagesJobIdRouteImport } from './routes/_app/messages/$jobId'
 import { Route as AppJobsPostRouteImport } from './routes/_app/jobs/post'
 import { Route as AppJobsJobIdRouteImport } from './routes/_app/jobs/$jobId'
@@ -66,6 +67,11 @@ const AppJobsIndexRoute = AppJobsIndexRouteImport.update({
   path: '/jobs/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppProfilesUserIdRoute = AppProfilesUserIdRouteImport.update({
+  id: '/profiles/$userId',
+  path: '/profiles/$userId',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppMessagesJobIdRoute = AppMessagesJobIdRouteImport.update({
   id: '/messages/$jobId',
   path: '/messages/$jobId',
@@ -92,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/jobs/$jobId': typeof AppJobsJobIdRoute
   '/jobs/post': typeof AppJobsPostRoute
   '/messages/$jobId': typeof AppMessagesJobIdRoute
+  '/profiles/$userId': typeof AppProfilesUserIdRoute
   '/jobs/': typeof AppJobsIndexRoute
   '/messages/': typeof AppMessagesIndexRoute
 }
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/jobs/$jobId': typeof AppJobsJobIdRoute
   '/jobs/post': typeof AppJobsPostRoute
   '/messages/$jobId': typeof AppMessagesJobIdRoute
+  '/profiles/$userId': typeof AppProfilesUserIdRoute
   '/jobs': typeof AppJobsIndexRoute
   '/messages': typeof AppMessagesIndexRoute
 }
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/_app/jobs/$jobId': typeof AppJobsJobIdRoute
   '/_app/jobs/post': typeof AppJobsPostRoute
   '/_app/messages/$jobId': typeof AppMessagesJobIdRoute
+  '/_app/profiles/$userId': typeof AppProfilesUserIdRoute
   '/_app/jobs/': typeof AppJobsIndexRoute
   '/_app/messages/': typeof AppMessagesIndexRoute
 }
@@ -135,6 +144,7 @@ export interface FileRouteTypes {
     | '/jobs/$jobId'
     | '/jobs/post'
     | '/messages/$jobId'
+    | '/profiles/$userId'
     | '/jobs/'
     | '/messages/'
   fileRoutesByTo: FileRoutesByTo
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/jobs/$jobId'
     | '/jobs/post'
     | '/messages/$jobId'
+    | '/profiles/$userId'
     | '/jobs'
     | '/messages'
   id:
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/_app/jobs/$jobId'
     | '/_app/jobs/post'
     | '/_app/messages/$jobId'
+    | '/_app/profiles/$userId'
     | '/_app/jobs/'
     | '/_app/messages/'
   fileRoutesById: FileRoutesById
@@ -238,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppJobsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/profiles/$userId': {
+      id: '/_app/profiles/$userId'
+      path: '/profiles/$userId'
+      fullPath: '/profiles/$userId'
+      preLoaderRoute: typeof AppProfilesUserIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/messages/$jobId': {
       id: '/_app/messages/$jobId'
       path: '/messages/$jobId'
@@ -269,6 +288,7 @@ interface AppRouteChildren {
   AppJobsJobIdRoute: typeof AppJobsJobIdRoute
   AppJobsPostRoute: typeof AppJobsPostRoute
   AppMessagesJobIdRoute: typeof AppMessagesJobIdRoute
+  AppProfilesUserIdRoute: typeof AppProfilesUserIdRoute
   AppJobsIndexRoute: typeof AppJobsIndexRoute
   AppMessagesIndexRoute: typeof AppMessagesIndexRoute
 }
@@ -280,6 +300,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppJobsJobIdRoute: AppJobsJobIdRoute,
   AppJobsPostRoute: AppJobsPostRoute,
   AppMessagesJobIdRoute: AppMessagesJobIdRoute,
+  AppProfilesUserIdRoute: AppProfilesUserIdRoute,
   AppJobsIndexRoute: AppJobsIndexRoute,
   AppMessagesIndexRoute: AppMessagesIndexRoute,
 }

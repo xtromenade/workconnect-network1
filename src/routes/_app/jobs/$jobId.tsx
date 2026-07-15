@@ -16,6 +16,8 @@ import {
   Check,
   X,
   MessageSquare,
+  Phone,
+  Video,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -54,6 +56,7 @@ function JobDetailContent({ jobId }: { jobId: string }) {
   const [bidMessage, setBidMessage] = useState('')
   const [submittingBid, setSubmittingBid] = useState(false)
   const [showBidForm, setShowBidForm] = useState(false)
+  const [callModal, setCallModal] = useState<'voice' | 'video' | null>(null)
 
   const bidList = Array.isArray(bids) ? bids : []
   const isCustomer = profile?.role === 'customer'
@@ -179,19 +182,39 @@ function JobDetailContent({ jobId }: { jobId: string }) {
             {job.customerName && <span>· Posted by {job.customerName}</span>}
           </div>
 
-          {/* Message button for accepted job */}
+          {/* Communication buttons for accepted job */}
           {acceptedBid && (isMyJob || (isWorker && myBid?.status === 'accepted')) && (
             <div className="mt-4 pt-4 border-t border-border">
-              <Link
-                to="/messages/$jobId"
-                params={{ jobId }}
-                className="inline-flex"
-              >
-                <Button variant="outline" size="sm" className="gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  {isMyJob ? 'Message Worker' : 'Message Customer'}
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  to="/messages/$jobId"
+                  params={{ jobId }}
+                  className="inline-flex"
+                >
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    {isMyJob ? 'Message Worker' : 'Message Customer'}
+                  </Button>
+                </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setCallModal('voice')}
+                >
+                  <Phone className="h-4 w-4" />
+                  Voice Call
                 </Button>
-              </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setCallModal('video')}
+                >
+                  <Video className="h-4 w-4" />
+                  Video Call
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -375,5 +398,38 @@ function JobDetailContent({ jobId }: { jobId: string }) {
         )}
       </div>
     </div>
+
+    {/* Call placeholder modal */}
+    {callModal && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        onClick={() => setCallModal(null)}
+      >
+        <div
+          className="bg-background rounded-lg p-8 max-w-sm mx-4 text-center shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {callModal === 'voice' ? (
+            <Phone className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          ) : (
+            <Video className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          )}
+          <h3 className="font-semibold text-lg mb-2">
+            {callModal === 'voice' ? 'Voice Call' : 'Video Call'}
+          </h3>
+          <p className="text-sm text-muted-foreground mb-6">
+            Voice/Video calling is coming soon! We&apos;re working on bringing
+            you real-time calls.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => setCallModal(null)}
+            className="w-full"
+          >
+            Close
+          </Button>
+        </div>
+      </div>
+    )}
   )
 }

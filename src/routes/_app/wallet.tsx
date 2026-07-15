@@ -3,8 +3,10 @@ import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
 import { useAuth } from '@/hooks/useAuth'
 import { useWallet, useTransactions } from '@/hooks/useWallet'
 import { useSubscription } from '@/hooks/useSubscription'
-import { Card, CardContent, Badge } from '@blinkdotnew/ui'
-import { Wallet, Loader2, ArrowUpRight, ArrowDownLeft, Clock } from 'lucide-react'
+import { useProfile } from '@/hooks/useProfile'
+import { Card, CardContent, Badge, Button } from '@blinkdotnew/ui'
+import { Wallet, Loader2, ArrowUpRight, ArrowDownLeft, Clock, ExternalLink, Check, Wrench, User } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export const Route = createFileRoute('/_app/wallet')({
   component: WalletPage,
@@ -128,6 +130,37 @@ function WalletContent() {
         </CardContent>
       </Card>
 
+      {/* ── Upgrade Plan section ─────────────────── */}
+      <UpgradePlans />
+
+      {/* ── Manage Subscription ──────────────────── */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="font-semibold text-sm">Manage Subscription</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                View or update your billing details on Stripe.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 shrink-0"
+              onClick={() =>
+                toast('Stripe integration coming soon', {
+                  icon: '💳',
+                  description: 'Subscription management will be available once Stripe keys are configured.',
+                })
+              }
+            >
+              <ExternalLink className="h-4 w-4" />
+              Manage
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Transactions */}
       <div>
         <h2 className="font-semibold text-base mb-3">Recent Transactions</h2>
@@ -183,6 +216,98 @@ function WalletContent() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function UpgradePlans() {
+  const { user } = useAuth()
+  const { data: profile } = useProfile(user?.id)
+
+  const isNigeria = profile?.country?.toUpperCase() === 'NG'
+
+  const handleUpgrade = (planName: string) => {
+    toast('Stripe integration coming soon', {
+      icon: '💳',
+      description: `${planName} checkout will open in a new tab once Stripe keys are configured.`,
+    })
+  }
+
+  const plans = [
+    {
+      name: 'Worker Plan',
+      description: 'For artisans and skilled workers.',
+      price: isNigeria ? '₦5,000' : '$7',
+      period: '/year',
+      features: [
+        'Unlimited job applications',
+        'Priority listing in search',
+        'Direct messaging with customers',
+        'Review collection',
+      ],
+      icon: Wrench,
+      cta: 'Upgrade',
+    },
+    {
+      name: 'Customer Plan',
+      description: 'For customers hiring talent.',
+      price: isNigeria ? '₦3,000' : '$5',
+      period: '/year',
+      features: [
+        'Unlimited job postings',
+        'Browse all worker profiles',
+        'Direct messaging with workers',
+        'Review workers',
+      ],
+      icon: User,
+      cta: 'Upgrade',
+    },
+  ]
+
+  return (
+    <div>
+      <h2 className="font-semibold text-base mb-3">Upgrade Plan</h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {plans.map((plan) => (
+          <Card key={plan.name}>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-primary/10 shrink-0">
+                  <plan.icon className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base">{plan.name}</h3>
+                  <p className="text-xs text-muted-foreground">{plan.description}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-2xl font-bold tracking-tight">
+                  {plan.price}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {plan.period}
+                  </span>
+                </p>
+              </div>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="default"
+                className="w-full gap-2"
+                onClick={() => handleUpgrade(plan.name)}
+              >
+                <ExternalLink className="h-4 w-4" />
+                {plan.cta}
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   )
