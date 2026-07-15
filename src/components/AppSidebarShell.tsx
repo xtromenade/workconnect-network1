@@ -42,11 +42,11 @@ interface NavItemDef {
 }
 
 const NAV_ITEMS: NavItemDef[] = [
-  { to: '/app/dashboard', icon: <LayoutDashboard className="h-4 w-4" />, label: 'Dashboard' },
-  { to: '/app/jobs', icon: <Search className="h-4 w-4" />, label: 'Browse Jobs' },
-  { to: '/app/messages', icon: <MessageSquare className="h-4 w-4" />, label: 'Messages' },
-  { to: '/app/wallet', icon: <Wallet className="h-4 w-4" />, label: 'Wallet' },
-  { to: '/app/settings', icon: <Settings className="h-4 w-4" />, label: 'Settings' },
+  { to: '/dashboard', icon: <LayoutDashboard className="h-4 w-4" />, label: 'Dashboard' },
+  { to: '/jobs', icon: <Search className="h-4 w-4" />, label: 'Browse Jobs' },
+  { to: '/messages', icon: <MessageSquare className="h-4 w-4" />, label: 'Messages' },
+  { to: '/wallet', icon: <Wallet className="h-4 w-4" />, label: 'Wallet' },
+  { to: '/settings', icon: <Settings className="h-4 w-4" />, label: 'Settings' },
 ]
 
 interface AppSidebarShellProps {

@@ -99,7 +99,7 @@ function ChatContent({ jobId }: { jobId: string }) {
       {/* Chat header */}
       <div className="flex items-center gap-3 px-4 h-14 border-b border-border bg-background shrink-0">
         <Link
-          to="/app/messages"
+          to="/messages"
           className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />

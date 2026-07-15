@@ -52,7 +52,7 @@ function JobsContent() {
           </p>
         </div>
         {isCustomer && (
-          <Link to="/app/jobs/post">
+          <Link to="/jobs/post">
             <Button className="bg-accent text-accent-foreground hover:bg-accent/90 gap-1.5">
               <Briefcase className="h-4 w-4" />
               Post a Job
@@ -105,7 +105,7 @@ function JobsContent() {
           {jobList.map((job) => (
             <Link
               key={job.id}
-              to="/app/jobs/$jobId"
+              to="/jobs/$jobId"
               params={{ jobId: job.id }}
               className="block group"
             >

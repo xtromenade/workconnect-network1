@@ -76,7 +76,7 @@ function HomeContent() {
   }
 
   if (user) {
-    navigate({ to: '/app/dashboard', replace: true })
+    navigate({ to: '/dashboard', replace: true })
     return null
   }
 

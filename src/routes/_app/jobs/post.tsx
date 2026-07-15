@@ -90,7 +90,7 @@ function PostJobContent() {
         paymentMethod,
       })
       toast.success('Job posted successfully!')
-      navigate({ to: '/app/jobs/$jobId', params: { jobId: job.id } })
+      navigate({ to: '/jobs/$jobId', params: { jobId: job.id } })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to post job'
       toast.error(message)
@@ -103,7 +103,7 @@ function PostJobContent() {
     <div className="max-w-lg mx-auto space-y-6">
       <button
         type="button"
-        onClick={() => navigate({ to: '/app/jobs' })}
+        onClick={() => navigate({ to: '/jobs' })}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />

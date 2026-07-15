@@ -133,7 +133,7 @@ function JobDetailContent({ jobId }: { jobId: string }) {
   return (
     <div className="max-w-3xl space-y-6">
       {/* Back link */}
-      <Link to="/app/jobs" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <Link to="/jobs" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />
         Back to jobs
       </Link>
@@ -183,7 +183,7 @@ function JobDetailContent({ jobId }: { jobId: string }) {
           {acceptedBid && (isMyJob || (isWorker && myBid?.status === 'accepted')) && (
             <div className="mt-4 pt-4 border-t border-border">
               <Link
-                to="/app/messages/$jobId"
+                to="/messages/$jobId"
                 params={{ jobId }}
                 className="inline-flex"
               >

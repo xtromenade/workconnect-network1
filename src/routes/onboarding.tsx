@@ -122,7 +122,7 @@ function OnboardingFlow() {
       })
 
       toast.success('Profile created! Welcome to WorkConnect.')
-      navigate({ to: '/app/dashboard', replace: true })
+      navigate({ to: '/dashboard', replace: true })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create profile'
       toast.error(message)

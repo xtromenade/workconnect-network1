@@ -157,7 +157,7 @@ function DashboardContent() {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-base">Recent Open Jobs</h2>
-              <Link to="/app/jobs">
+              <Link to="/jobs">
                 <Button variant="ghost" size="sm">
                   Browse All
                 </Button>
@@ -182,7 +182,7 @@ function DashboardContent() {
                 {jobs.slice(0, 5).map((job) => (
                   <Link
                     key={job.id}
-                    to="/app/jobs/$jobId"
+                    to="/jobs/$jobId"
                     params={{ jobId: job.id }}
                     className="block"
                   >
@@ -221,7 +221,7 @@ function DashboardContent() {
                     .map((bid) => (
                       <Link
                         key={bid.id}
-                        to="/app/jobs/$jobId"
+                        to="/jobs/$jobId"
                         params={{ jobId: bid.jobId }}
                         className="block"
                       >
@@ -251,7 +251,7 @@ function DashboardContent() {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-base">Your Recent Jobs</h2>
-              <Link to="/app/jobs/post">
+              <Link to="/jobs/post">
                 <Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90 gap-1.5">
                   <Plus className="h-3.5 w-3.5" />
                   Post a Job
@@ -267,7 +267,7 @@ function DashboardContent() {
                 <CardContent className="py-10 text-center">
                   <Briefcase className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">You haven&apos;t posted any jobs yet.</p>
-                  <Link to="/app/jobs/post">
+                  <Link to="/jobs/post">
                     <Button size="sm" className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90 gap-1.5">
                       <Plus className="h-3.5 w-3.5" />
                       Post Your First Job
@@ -280,7 +280,7 @@ function DashboardContent() {
                 {myJobList.map((job) => (
                   <Link
                     key={job.id}
-                    to="/app/jobs/$jobId"
+                    to="/jobs/$jobId"
                     params={{ jobId: job.id }}
                     className="block"
                   >
@@ -331,13 +331,13 @@ function DashboardContent() {
               <h3 className="font-semibold text-sm">Quick Actions</h3>
               {isWorker && (
                 <>
-                  <Link to="/app/jobs" className="block">
+                  <Link to="/jobs" className="block">
                     <Button variant="outline" size="sm" className="w-full justify-start gap-2">
                       <Briefcase className="h-3.5 w-3.5" />
                       Browse All Jobs
                     </Button>
                   </Link>
-                  <Link to="/app/messages" className="block">
+                  <Link to="/messages" className="block">
                     <Button variant="outline" size="sm" className="w-full justify-start gap-2">
                       <FileText className="h-3.5 w-3.5" />
                       Messages
@@ -353,7 +353,7 @@ function DashboardContent() {
                       Post a New Job
                     </Button>
                   </Link>
-                  <Link to="/app/jobs" className="block">
+                  <Link to="/jobs" className="block">
                     <Button variant="outline" size="sm" className="w-full justify-start gap-2">
                       <Briefcase className="h-3.5 w-3.5" />
                       Browse Workers
@@ -361,7 +361,7 @@ function DashboardContent() {
                   </Link>
                 </>
               )}
-              <Link to="/app/wallet" className="block">
+              <Link to="/wallet" className="block">
                 <Button variant="outline" size="sm" className="w-full justify-start gap-2">
                   <DollarSign className="h-3.5 w-3.5" />
                   View Wallet

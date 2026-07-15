@@ -113,7 +113,7 @@ function ConversationRow({ jobId, userId }: { jobId: string; userId: string }) {
 
   return (
     <Link
-      to="/app/messages/$jobId"
+      to="/messages/$jobId"
       params={{ jobId }}
       className="block group"
     >
