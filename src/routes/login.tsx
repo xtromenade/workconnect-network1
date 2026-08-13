@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
 import { useAuth } from '@/hooks/useAuth'
+import { GoogleSignInButton } from '@/components/GoogleSignInButton'
 import { Button, Input, Tabs, TabsList, TabsTrigger, TabsContent } from '@blinkdotnew/ui'
 import { Briefcase, Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -35,7 +36,7 @@ function LoginPage() {
 }
 
 function AuthForm() {
-  const { user, isLoading, login, signup } = useAuth()
+  const { user, isLoading, login, signup, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
@@ -55,6 +56,22 @@ function AuthForm() {
   if (user) {
     navigate({ to: '/onboarding', replace: true })
     return null
+  }
+
+  const handleGoogleCredential = async (credential: string) => {
+    setError(null)
+    setSubmitting(true)
+    try {
+      await loginWithGoogle(credential)
+      toast.success('Signed in with Google!')
+      navigate({ to: '/onboarding', replace: true })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Google sign-in failed. Please try again.'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -93,6 +110,22 @@ function AuthForm() {
             : 'Start finding work or hiring talent'}
         </p>
       </div>
+
+      {Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID) && (
+        <>
+          <div className="mb-6">
+            <GoogleSignInButton onCredential={handleGoogleCredential} />
+          </div>
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or continue with email</span>
+            </div>
+          </div>
+        </>
+      )}
 
       <Tabs value={tab} onValueChange={(v) => { setTab(v as 'login' | 'signup'); setError(null) }}>
         <TabsList className="w-full mb-6">

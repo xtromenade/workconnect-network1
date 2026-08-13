@@ -31,6 +31,8 @@ export interface Job {
   acceptedBidId: string | null
   workerId: string | null
   paymentMethod: 'cash' | 'wallet'
+  workerCompletedAt: string | null // worker marked the work as finished, awaiting customer confirmation
+  completedAt: string | null // customer confirmed — job is officially done
   createdAt: string
   updatedAt: string
   // joined

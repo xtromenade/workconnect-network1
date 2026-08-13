@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { BlinkClientBoundary } from '@/components/BlinkClientBoundary'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile, useUpdateProfile } from '@/hooks/useProfile'
+import { useSwitchRole } from '@/hooks/useSubscription'
 import { Button, Input, Textarea, Badge, Card, CardContent, Avatar, AvatarFallback } from '@blinkdotnew/ui'
 import {
   Globe,
@@ -14,6 +15,9 @@ import {
   Save,
   ChevronDown,
   User,
+  Repeat,
+  MailWarning,
+  MailCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { countries, getStatesForCountry, getCitiesForState } from '@/data/locations'
@@ -39,9 +43,13 @@ function SettingsPage() {
 }
 
 function SettingsContent() {
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading, resendVerificationEmail } = useAuth()
+  const navigate = useNavigate()
   const { data: profile, isLoading: profileLoading } = useProfile(user?.id)
   const updateProfile = useUpdateProfile()
+  const switchRole = useSwitchRole()
+  const [switchingRole, setSwitchingRole] = useState(false)
+  const [resendingVerification, setResendingVerification] = useState(false)
 
   // Parse stored city into state + city parts
   const parseStoredCity = (city: string): { state: string; city: string } => {
@@ -143,6 +151,45 @@ function SettingsContent() {
 
   const isWorker = profile.role === 'worker'
 
+  const handleSwitchRole = async () => {
+    const newRole: 'worker' | 'customer' = isWorker ? 'customer' : 'worker'
+    setSwitchingRole(true)
+    try {
+      await switchRole.mutateAsync({ userId: user.id, country: profile.country, role: newRole })
+      await updateProfile.mutateAsync({ id: profile.id, userId: user.id, role: newRole })
+      toast.success(
+        newRole === 'worker'
+          ? "You're now set up as a worker."
+          : "You're now set up as a customer.",
+      )
+      // Role affects nearly every page (dashboard, jobs visibility, etc.) — a full
+      // navigation is the simplest way to make sure everything reflects the switch.
+      navigate({ to: '/dashboard' })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to switch account type'
+      toast.error(message)
+    } finally {
+      setSwitchingRole(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    setResendingVerification(true)
+    try {
+      const result = await resendVerificationEmail()
+      if (result.alreadyVerified) {
+        toast.success('Your email is already verified.')
+      } else {
+        toast.success('Verification email sent — check your inbox.')
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to resend verification email'
+      toast.error(message)
+    } finally {
+      setResendingVerification(false)
+    }
+  }
+
   return (
     <div className="max-w-2xl space-y-8">
       {/* ── Header ─────────────────────────────────── */}
@@ -170,6 +217,65 @@ function SettingsContent() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Email verification ─────────────────────── */}
+      {!user.emailVerified && (
+        <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <MailWarning className="h-5 w-5 text-amber-600 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Verify your email</p>
+                <p className="text-xs text-muted-foreground">
+                  Check {userEmail} for a verification link.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleResendVerification}
+              disabled={resendingVerification}
+              className="flex-shrink-0"
+            >
+              {resendingVerification ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Resend'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {user.emailVerified && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+          <MailCheck className="h-3.5 w-3.5 text-emerald-500" />
+          Email verified
+        </div>
+      )}
+
+      {/* ── Account type ───────────────────────────── */}
+      <Card>
+        <CardContent className="p-6 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-1">
+              Account type
+            </h2>
+            <p className="text-sm">
+              You're currently set up as a <span className="font-medium capitalize">{profile.role}</span>.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Switch anytime — your {isWorker ? 'customer' : 'worker'} profile and trial
+              (if you have one) will be waiting when you switch back.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="gap-2 flex-shrink-0"
+            onClick={handleSwitchRole}
+            disabled={switchingRole}
+          >
+            {switchingRole ? <Loader2 className="h-4 w-4 animate-spin" /> : <Repeat className="h-4 w-4" />}
+            Switch to {isWorker ? 'Customer' : 'Worker'}
+          </Button>
         </CardContent>
       </Card>
 

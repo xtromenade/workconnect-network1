@@ -56,8 +56,13 @@ npm start          # http://localhost:4000
 cd workconnect-network1
 npm install
 echo "VITE_API_URL=http://localhost:4000" > .env
+# Optional — only needed to test the Google sign-in button locally:
+# echo "VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com" >> .env
 npm run dev
 ```
+
+Email verification works out of the box in dev mode — signup logs the verification link to
+the backend terminal (no `RESEND_API_KEY` needed to test it).
 
 ## Deploying
 
@@ -71,6 +76,65 @@ One thing specific to this frontend: after deploying, set the `VITE_API_URL` env
 variable in Netlify's dashboard to your deployed backend's URL, then trigger a rebuild (Vite
 bakes env vars in at build time, so this needs a fresh build, not just a page refresh).
 
+## Track record at the point of bidding
+
+On the job detail page, each side sees the other's history before committing:
+
+- **Customer, on each bid**: the worker's average rating (and how many reviews it's based
+  on), how many bids they've had accepted, how many of those jobs actually got completed, and
+  a completion rate (`completed ÷ accepted`, color-coded — green ≥80%, amber ≥50%, red below
+  that). A worker who's never had a bid accepted just shows no completion rate yet, rather
+  than a misleading 0%.
+- **Worker, on the job itself**: the customer's total spend across their completed jobs and
+  how many times they've hired someone (accepted a bid) — so a worker can gauge whether a
+  customer follows through before spending time on a bid.
+
+Both are computed live from the `jobs`, `bids`, and `reviews` tables (`src/hooks/useStats.ts`)
+— no new backend endpoints needed, since the generic records API already supports the
+`where` filters these need.
+
+## Job completion handshake
+
+A two-step confirmation on the job detail page, once a bid's been accepted and the job is
+`in_progress`:
+
+1. **Worker clicks "Mark Job Complete"** — the job stays `in_progress`, but now shows
+   `workerCompletedAt` set, so the customer sees "The worker marked this job complete."
+2. **Customer clicks "Confirm Completed"** — this is what actually closes the job
+   (`status: 'completed'`). If the job's payment method is `wallet`, this also settles the
+   payment: debits the customer's wallet, credits the worker's (creating the worker's wallet
+   if they don't have one yet), and logs both sides as transactions. If the customer's wallet
+   balance is too low, the job still completes — you get a toast saying to settle payment
+   outside the app (e.g. cash) rather than a hard failure.
+
+Once completed, the customer gets an inline star-rating + comment box to review the worker
+(one review per job — hidden after they've submitted).
+
+Neither button appears to the wrong party — the worker only sees "Mark Complete" if their bid
+was actually accepted for that job, and the customer only sees "Confirm" if it's their job.
+
+## Account type switching, email verification, Google sign-in
+
+Three more pieces since the initial integration:
+
+- **Switch between worker and customer anytime** — from Settings, not just at onboarding.
+  Each role keeps its own independent subscription (trial or paid), so switching back and
+  forth never resets a trial you've already started, and switching to a role for the first
+  time starts a fresh one. Backend: `PATCH /api/users/me/switch-role`.
+- **Email verification** — every signup gets a verification link (`GET
+  /api/auth/verify-email?token=...`, landing on the new `/verify-email` page). Without a
+  `RESEND_API_KEY` set, the email is logged to the backend's console instead of actually
+  sent — enough to test the full flow locally by copying the link from the terminal. Add a
+  free [Resend](https://resend.com) API key to send real emails. Settings shows a "verify
+  your email" banner with a resend button until confirmed; nothing else is blocked on it.
+- **Google sign-in** — a "Continue with Google" button appears on the login page once
+  `VITE_GOOGLE_CLIENT_ID` (frontend) and `GOOGLE_CLIENT_ID` (backend, same value) are set.
+  Leave them unset and the button just doesn't render — email/password auth is unaffected.
+  Get credentials at [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+  (OAuth client type: "Web application"; add your site's URL to Authorized JavaScript
+  origins). Google accounts are automatically marked email-verified, since Google already
+  confirmed ownership.
+
 ## Known limitations / next steps
 
 - **Calls need a TURN server for reliability in production.** The current setup uses a public
@@ -83,3 +147,15 @@ bakes env vars in at build time, so this needs a fresh build, not just a page re
   Blink-backed prototype behaved (client-trusted), which is fine for a prototype but should
   get proper authorization rules added before handling real users' data.
 - **Payments are simulated** until real Paystack/Stripe keys are added to the backend.
+- **Email verification doesn't block anything yet** — people can use the app fully before
+  verifying. That's a deliberate default (harsh enough to annoy real users, and there's no
+  guarantee a real email provider is configured), but if you want it enforced, the obvious
+  place is `useAuth.ts` / route guards in `_app.tsx`: check `user.emailVerified` and redirect
+  unverified users to a "please verify" screen for whichever actions you want gated.
+- **The Google sign-in button needs matching origins configured in Google Cloud Console.**
+  If it renders but clicking it errors out, the most common cause is the site's URL not being
+  added to "Authorized JavaScript origins" for your OAuth client — add both your local dev
+  URL (`http://localhost:5173`) and your deployed Netlify URL there.
+- **Verification links point at `CLIENT_URL`** (a backend env var) — if that's stale after
+  you change domains, verification emails will link to the wrong place. Update it in Render's
+  dashboard whenever your frontend URL changes.

@@ -6,6 +6,10 @@ import { useProfile } from '@/hooks/useProfile'
 import { useJob, useUpdateJob } from '@/hooks/useJobs'
 import { useBids, useCreateBid, useUpdateBidStatus } from '@/hooks/useBids'
 import { useCall } from '@/context/CallContext'
+import { useReviews, useCreateReview } from '@/hooks/useReviews'
+import { useCustomerStats, useWorkerStats } from '@/hooks/useStats'
+import { apiTable } from '@/lib/apiTable'
+import type { Wallet, Transaction, Bid, Job } from '@/types'
 import { Button, Input, Textarea, Badge, Card, CardContent, Avatar, AvatarFallback } from '@blinkdotnew/ui'
 import {
   Loader2,
@@ -19,12 +23,73 @@ import {
   MessageSquare,
   Phone,
   Video,
+  CheckCircle2,
+  Clock,
+  Star,
+  Wallet as WalletIcon,
+  Users,
+  TrendingUp,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+
+const walletsTable = () => apiTable<Wallet>('wallets')
+const transactionsTable = () => apiTable<Transaction>('transactions')
 
 export const Route = createFileRoute('/_app/jobs/$jobId')({
   component: JobDetailPage,
 })
+
+// Moves `amount` from the customer's wallet to the worker's wallet and logs both sides
+// as transactions. Deliberately non-blocking on failure — if the customer doesn't have
+// enough wallet balance, the job still gets marked complete (payment presumably happens
+// outside the app, e.g. cash), just with a heads-up toast instead of a hard error.
+async function settleWalletPayment(
+  customerId: string,
+  workerId: string,
+  amount: number,
+  currency: string,
+  jobId: string,
+) {
+  const [customerWallets, workerWallets] = await Promise.all([
+    walletsTable().list({ where: { userId: customerId }, limit: 1 }),
+    walletsTable().list({ where: { userId: workerId }, limit: 1 }),
+  ])
+  const customerWallet = customerWallets[0]
+
+  if (!customerWallet || customerWallet.balance < amount) {
+    toast('Customer wallet balance is too low — mark this job’s payment as settled outside the app.', { icon: '⚠️' })
+    return
+  }
+
+  let workerWallet = workerWallets[0]
+  if (!workerWallet) {
+    workerWallet = await walletsTable().create({ userId: workerId, balance: 0, currency })
+  }
+
+  await walletsTable().update(customerWallet.id, { balance: customerWallet.balance - amount })
+  await walletsTable().update(workerWallet.id, { balance: workerWallet.balance + amount })
+
+  await Promise.all([
+    transactionsTable().create({
+      walletId: customerWallet.id,
+      userId: customerId,
+      amount,
+      type: 'debit',
+      reference: `job-${jobId}`,
+      description: 'Payment for completed job',
+      jobId,
+    }),
+    transactionsTable().create({
+      walletId: workerWallet.id,
+      userId: workerId,
+      amount,
+      type: 'credit',
+      reference: `job-${jobId}`,
+      description: 'Payment received for completed job',
+      jobId,
+    }),
+  ])
+}
 
 function JobDetailPage() {
   const { jobId } = useParams({ from: '/_app/jobs/$jobId' })
@@ -53,11 +118,19 @@ function JobDetailContent({ jobId }: { jobId: string }) {
   const updateBidStatus = useUpdateBidStatus()
   const updateJob = useUpdateJob()
   const { startCall } = useCall()
+  const { data: jobReviews } = useReviews(job?.workerId ?? undefined)
+  const createReview = useCreateReview()
+  const { data: customerStats } = useCustomerStats(job?.customerId)
 
   const [bidAmount, setBidAmount] = useState('')
   const [bidMessage, setBidMessage] = useState('')
   const [submittingBid, setSubmittingBid] = useState(false)
   const [showBidForm, setShowBidForm] = useState(false)
+  const [marking, setMarking] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [reviewRating, setReviewRating] = useState(5)
+  const [reviewComment, setReviewComment] = useState('')
+  const [submittingReview, setSubmittingReview] = useState(false)
 
   const bidList = Array.isArray(bids) ? bids : []
   const isCustomer = profile?.role === 'customer'
@@ -68,6 +141,9 @@ function JobDetailContent({ jobId }: { jobId: string }) {
     ? bidList.find((b) => b.id === job.acceptedBidId)
     : null
   const callPeerId = isMyJob ? acceptedBid?.workerId : job?.customerId
+  const myReview = Array.isArray(jobReviews)
+    ? jobReviews.find((r) => r.jobId === jobId && r.reviewerId === user?.id)
+    : undefined
 
   if (isLoading) {
     return (
@@ -135,6 +211,56 @@ function JobDetailContent({ jobId }: { jobId: string }) {
     }
   }
 
+  // Worker marks the work finished — job stays "in_progress" until the customer confirms.
+  const handleMarkComplete = async () => {
+    setMarking(true)
+    try {
+      await updateJob.mutateAsync({ id: jobId, workerCompletedAt: new Date().toISOString() })
+      toast.success('Marked as complete — waiting for the customer to confirm.')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to mark job complete')
+    } finally {
+      setMarking(false)
+    }
+  }
+
+  // Customer confirms — this is what actually closes the job out. If the job was set up
+  // to pay via in-app wallet, settle the transfer here; cash jobs skip straight to "completed".
+  const handleConfirmCompletion = async () => {
+    if (!job || !job.workerId) return
+    setConfirming(true)
+    try {
+      if (job.paymentMethod === 'wallet') {
+        await settleWalletPayment(job.customerId, job.workerId, job.budget, job.currency, jobId)
+      }
+      await updateJob.mutateAsync({ id: jobId, status: 'completed', completedAt: new Date().toISOString() })
+      toast.success('Job confirmed as complete!')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to confirm completion')
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  const handleSubmitReview = async () => {
+    if (!user || !job?.workerId) return
+    setSubmittingReview(true)
+    try {
+      await createReview.mutateAsync({
+        jobId,
+        reviewerId: user.id,
+        reviewedUserId: job.workerId,
+        rating: reviewRating,
+        comment: reviewComment,
+      })
+      toast.success('Review submitted — thanks for the feedback!')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit review')
+    } finally {
+      setSubmittingReview(false)
+    }
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       {/* Back link */}
@@ -173,7 +299,9 @@ function JobDetailContent({ jobId }: { jobId: string }) {
                     : 'outline'
               }
             >
-              {job.status.replace('_', ' ')}
+              {job.status === 'in_progress' && job.workerCompletedAt
+                ? 'awaiting confirmation'
+                : job.status.replace('_', ' ')}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-4 leading-relaxed whitespace-pre-wrap">
@@ -183,6 +311,22 @@ function JobDetailContent({ jobId }: { jobId: string }) {
             <span>Payment: {job.paymentMethod}</span>
             {job.customerName && <span>· Posted by {job.customerName}</span>}
           </div>
+
+          {/* Customer track record — shown to workers deciding whether to bid */}
+          {isWorker && customerStats && (
+            <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <WalletIcon className="h-3.5 w-3.5" />
+                {customerStats.amountSpent > 0
+                  ? `${customerStats.currency} ${customerStats.amountSpent.toLocaleString()} spent`
+                  : 'No completed jobs yet'}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                {customerStats.numberOfHires} hire{customerStats.numberOfHires === 1 ? '' : 's'}
+              </span>
+            </div>
+          )}
 
           {/* Communication buttons for accepted job */}
           {acceptedBid && (isMyJob || (isWorker && myBid?.status === 'accepted')) && (
@@ -223,6 +367,118 @@ function JobDetailContent({ jobId }: { jobId: string }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Completion handshake — worker marks done, customer confirms */}
+      {job.status === 'in_progress' && (isMyJob || (isWorker && myBid?.status === 'accepted')) && (
+        <Card className={job.workerCompletedAt ? 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/20' : ''}>
+          <CardContent className="p-4">
+            {isWorker && myBid?.status === 'accepted' && (
+              <>
+                {job.workerCompletedAt ? (
+                  <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+                    <Clock className="h-4 w-4" />
+                    Marked complete — waiting for the customer to confirm.
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm text-muted-foreground">Finished the work?</p>
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5"
+                      onClick={handleMarkComplete}
+                      disabled={marking}
+                    >
+                      {marking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      Mark Job Complete
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {isMyJob && (
+              <>
+                {job.workerCompletedAt ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium">The worker marked this job complete.</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Confirm once you're happy with the work
+                        {job.paymentMethod === 'wallet' ? ' — this releases payment from your wallet.' : '.'}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5 flex-shrink-0"
+                      onClick={handleConfirmCompletion}
+                      disabled={confirming}
+                    >
+                      {confirming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      Confirm Completed
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    Waiting for the worker to mark this job complete.
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Completed — show confirmation + let the customer leave a review */}
+      {job.status === 'completed' && (
+        <Card className="border-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/20">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" />
+              Job completed{job.completedAt ? ` on ${new Date(job.completedAt).toLocaleDateString()}` : ''}
+            </div>
+
+            {isMyJob && job.workerId && (
+              myReview ? (
+                <p className="text-xs text-muted-foreground">You've already reviewed this worker for this job. Thanks!</p>
+              ) : (
+                <div className="space-y-2 pt-1">
+                  <p className="text-xs font-medium">Rate your experience</p>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setReviewRating(n)}
+                        className="p-0.5"
+                        aria-label={`${n} star${n === 1 ? '' : 's'}`}
+                      >
+                        <Star
+                          className={`h-5 w-5 ${n <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground'}`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <Textarea
+                    placeholder="How did it go? (optional)"
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    className="min-h-[70px] text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    className="bg-accent text-accent-foreground hover:bg-accent/90"
+                    onClick={handleSubmitReview}
+                    disabled={submittingReview}
+                  >
+                    {submittingReview ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Submit Review'}
+                  </Button>
+                </div>
+              )
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Bids section */}
       <div>
@@ -314,93 +570,129 @@ function JobDetailContent({ jobId }: { jobId: string }) {
         ) : (
           <div className="space-y-3">
             {bidList.map((bid) => (
-              <Card
+              <BidCard
                 key={bid.id}
-                className={
-                  bid.status === 'accepted' ? 'border-accent/50' : ''
-                }
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarFallback className="text-[10px] bg-muted">
-                          {bid.workerName
-                            ? bid.workerName
-                                .split(' ')
-                                .map((n) => n[0])
-                                .join('')
-                                .toUpperCase()
-                                .slice(0, 2)
-                            : 'W'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-medium">
-                          {bid.workerName || 'Worker'}
-                        </p>
-                        {bid.workerSkills && (
-                          <p className="text-xs text-muted-foreground">
-                            {bid.workerSkills}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-semibold text-sm">
-                        {bid.amount.toLocaleString()}
-                      </p>
-                      <Badge
-                        variant={
-                          bid.status === 'accepted'
-                            ? 'default'
-                            : bid.status === 'rejected'
-                              ? 'destructive'
-                              : 'secondary'
-                        }
-                        className="text-[10px] mt-1"
-                      >
-                        {bid.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  {bid.message && (
-                    <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-                      {bid.message}
-                    </p>
-                  )}
-
-                  {/* Customer actions */}
-                  {isMyJob && bid.status === 'pending' && job.status === 'open' && (
-                    <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5"
-                        onClick={() => handleAcceptBid(bid.id)}
-                        disabled={updateBidStatus.isPending}
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                        Accept
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="gap-1.5 text-destructive hover:text-destructive"
-                        onClick={() => handleRejectBid(bid.id)}
-                        disabled={updateBidStatus.isPending}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                        Reject
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                bid={bid}
+                jobStatus={job.status}
+                isMyJob={isMyJob}
+                showWorkerStats={isMyJob}
+                onAccept={() => handleAcceptBid(bid.id)}
+                onReject={() => handleRejectBid(bid.id)}
+                actionPending={updateBidStatus.isPending}
+              />
             ))}
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+function CompletionRateBadge({ rate }: { rate: number }) {
+  const color =
+    rate >= 80 ? 'text-emerald-600' : rate >= 50 ? 'text-amber-600' : 'text-destructive'
+  return (
+    <span className={`flex items-center gap-1 ${color}`}>
+      <TrendingUp className="h-3 w-3" />
+      {rate}% completion
+    </span>
+  )
+}
+
+function BidCard({
+  bid,
+  jobStatus,
+  isMyJob,
+  showWorkerStats,
+  onAccept,
+  onReject,
+  actionPending,
+}: {
+  bid: Bid
+  jobStatus: Job['status']
+  isMyJob: boolean
+  showWorkerStats: boolean
+  onAccept: () => void
+  onReject: () => void
+  actionPending: boolean
+}) {
+  const { data: stats } = useWorkerStats(showWorkerStats ? bid.workerId : undefined)
+
+  return (
+    <Card className={bid.status === 'accepted' ? 'border-accent/50' : ''}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8 shrink-0">
+              <AvatarFallback className="text-[10px] bg-muted">
+                {bid.workerName
+                  ? bid.workerName
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2)
+                  : 'W'}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="text-sm font-medium">{bid.workerName || 'Worker'}</p>
+              {bid.workerSkills && (
+                <p className="text-xs text-muted-foreground">{bid.workerSkills}</p>
+              )}
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="font-semibold text-sm">{bid.amount.toLocaleString()}</p>
+            <Badge
+              variant={
+                bid.status === 'accepted' ? 'default' : bid.status === 'rejected' ? 'destructive' : 'secondary'
+              }
+              className="text-[10px] mt-1"
+            >
+              {bid.status}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Worker track record — shown to the customer deciding who to hire */}
+        {showWorkerStats && stats && (
+          <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Star className={`h-3.5 w-3.5 ${stats.reviewCount > 0 ? 'fill-amber-400 text-amber-400' : ''}`} />
+              {stats.reviewCount > 0 ? `${stats.avgRating.toFixed(1)} (${stats.reviewCount})` : 'No ratings yet'}
+            </span>
+            <span>
+              {stats.jobsAccepted} accepted · {stats.jobsCompleted} completed
+            </span>
+            {stats.completionRate !== null && <CompletionRateBadge rate={stats.completionRate} />}
+          </div>
+        )}
+
+        {bid.message && (
+          <p className="text-xs text-muted-foreground mt-3 leading-relaxed">{bid.message}</p>
+        )}
+
+        {/* Customer actions */}
+        {isMyJob && bid.status === 'pending' && jobStatus === 'open' && (
+          <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={onAccept} disabled={actionPending}>
+              <Check className="h-3.5 w-3.5" />
+              Accept
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="gap-1.5 text-destructive hover:text-destructive"
+              onClick={onReject}
+              disabled={actionPending}
+            >
+              <X className="h-3.5 w-3.5" />
+              Reject
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

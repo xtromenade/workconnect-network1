@@ -74,6 +74,37 @@ export function useCreateSubscription() {
   })
 }
 
+/**
+ * Lets an already-onboarded person switch between worker and customer at any time
+ * (e.g. from Settings). Each role keeps its own independent trial/paid subscription —
+ * switching back to a role you've already paid for won't reset it.
+ */
+export function useSwitchRole() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      country,
+      role,
+    }: {
+      userId: string
+      country?: string
+      role: 'worker' | 'customer'
+    }) => {
+      const data = await apiRequest<{ subscription: BackendSubscription }>('/api/users/me/switch-role', {
+        method: 'PATCH',
+        body: { role, country },
+      })
+      return toSubscription(userId, data.subscription)
+    },
+    onSettled: (_data, _error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['subscription', variables.userId] })
+      queryClient.invalidateQueries({ queryKey: ['profile', variables.userId] })
+    },
+  })
+}
+
 /** Checkout — wires to the backend's real (currently simulated) Paystack/Stripe flow. */
 export function useCreateCheckout() {
   return useMutation({

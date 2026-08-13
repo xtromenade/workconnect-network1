@@ -7,6 +7,8 @@ export interface AppUser {
   id: string
   email: string
   displayName: string | null
+  emailVerified: boolean
+  authProvider: 'password' | 'google'
 }
 
 interface BackendUser {
@@ -15,10 +17,18 @@ interface BackendUser {
   full_name: string
   role: 'artisan' | 'customer'
   country: string
+  email_verified: number
+  auth_provider: 'password' | 'google'
 }
 
 function toAppUser(u: BackendUser): AppUser {
-  return { id: u.id, email: u.email, displayName: u.full_name }
+  return {
+    id: u.id,
+    email: u.email,
+    displayName: u.full_name,
+    emailVerified: !!u.email_verified,
+    authProvider: u.auth_provider || 'password',
+  }
 }
 
 export function useAuth() {
@@ -70,11 +80,29 @@ export function useAuth() {
     connectSocket(data.token)
   }, [])
 
+  /** Google Identity Services returns an ID token ("credential") client-side; the
+   * backend verifies it and finds-or-creates a matching account. */
+  const loginWithGoogle = useCallback(async (credential: string) => {
+    const data = await apiRequest<{ token: string; user: BackendUser }>('/api/auth/google', {
+      method: 'POST',
+      body: { credential },
+    })
+    setToken(data.token)
+    setUser(toAppUser(data.user))
+    connectSocket(data.token)
+  }, [])
+
+  const resendVerificationEmail = useCallback(async () => {
+    return apiRequest<{ ok: boolean; alreadyVerified?: boolean }>('/api/auth/resend-verification', {
+      method: 'POST',
+    })
+  }, [])
+
   const logout = useCallback(async () => {
     setToken(null)
     setUser(null)
     disconnectSocket()
   }, [])
 
-  return { user, isLoading, login, signup, logout }
+  return { user, isLoading, login, signup, loginWithGoogle, resendVerificationEmail, logout, refresh }
 }
