@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   DollarSign,
   TrendingUp,
+  Users,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_app/dashboard')({
@@ -285,7 +286,9 @@ function DashboardContent() {
                     params={{ jobId: job.id }}
                     className="block"
                   >
-                    <Card className="hover:shadow-sm transition-shadow cursor-pointer">
+                    <Card className={`hover:shadow-sm transition-shadow cursor-pointer ${
+                      job.status === 'open' && (job.bidCount ?? 0) > 0 ? 'border-accent/40' : ''
+                    }`}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -294,18 +297,29 @@ function DashboardContent() {
                               {job.description}
                             </p>
                           </div>
-                          <Badge
-                            variant={
-                              job.status === 'open'
-                                ? 'default'
-                                : job.status === 'in_progress'
-                                  ? 'secondary'
-                                  : 'outline'
-                            }
-                            className="shrink-0"
-                          >
-                            {job.status.replace('_', ' ')}
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
+                            <Badge
+                              variant={
+                                job.status === 'open'
+                                  ? 'default'
+                                  : job.status === 'in_progress'
+                                    ? 'secondary'
+                                    : 'outline'
+                              }
+                            >
+                              {job.status.replace('_', ' ')}
+                            </Badge>
+                            {job.status === 'open' && (
+                              <span
+                                className={`flex items-center gap-1 text-[11px] font-medium ${
+                                  (job.bidCount ?? 0) > 0 ? 'text-accent' : 'text-muted-foreground'
+                                }`}
+                              >
+                                <Users className="h-3 w-3" />
+                                {job.bidCount ?? 0} bid{job.bidCount === 1 ? '' : 's'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
                           <span>{job.category}</span>

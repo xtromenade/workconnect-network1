@@ -112,3 +112,44 @@ export interface Review {
 }
 
 export type Currency = 'NGN' | 'USD'
+
+// Account-activity notifications — bid updates, price change requests, job completion
+// handshake — shown via the bell icon in the header for both workers and customers.
+export interface Notification {
+  id: string
+  userId: string // who this notification is for
+  title: string
+  body: string
+  link: string // route to navigate to when clicked, e.g. "/jobs/abc123"
+  read: string // SQLite boolean "0"/"1"
+  createdAt: string
+}
+
+// Private negotiation thread scoped to a single bid — separate from the main
+// post-acceptance job chat, so each bidder's discussion with the customer stays
+// between just the two of them, even though bid amounts themselves are visible to all.
+export interface BidMessage {
+  id: string
+  jobId: string
+  bidId: string
+  senderId: string
+  receiverId: string
+  content: string
+  createdAt: string
+}
+
+// A worker's request to change the agreed price after their bid was accepted (the job
+// turned out to need more or less work than the original bid covered). The customer
+// approves or declines; approving updates the job's budget to the new amount.
+export interface PriceRequest {
+  id: string
+  jobId: string
+  bidId: string
+  requestedBy: string // workerId
+  previousAmount: number
+  requestedAmount: number
+  reason: string
+  status: 'pending' | 'approved' | 'rejected'
+  createdAt: string
+  resolvedAt: string | null
+}

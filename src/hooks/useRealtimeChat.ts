@@ -18,7 +18,7 @@ export interface PresenceUser {
   lastSeen: number
 }
 
-interface UseRealtimeChatReturn {
+interface UseRoomChatReturn {
   messages: RealtimeMessage[]
   sendMessage: (text: string) => Promise<void>
   onlineUsers: PresenceUser[]
@@ -26,24 +26,24 @@ interface UseRealtimeChatReturn {
 }
 
 /**
- * Real-time chat over the ArtisanLink backend's Socket.io "generic room" channel
- * (room:join / room:message / room:presence) — a pure ephemeral relay + presence
- * layer, same role the old Blink realtime channel played. Message *persistence*
- * still goes through useSendMessage() (REST, via apiTable) exactly as before —
- * this hook is only responsible for the live/ephemeral half of the chat.
+ * Shared implementation behind a Socket.io "generic room" (room:join / room:message /
+ * room:presence) — a pure ephemeral relay + presence layer, same role the old Blink
+ * realtime channel played. Message *persistence* goes through a separate REST call
+ * (useSendMessage / useSendBidMessage, via apiTable) — this hook only handles the
+ * live/ephemeral half. `roomId` is caller-supplied so different features (job chat,
+ * per-bid negotiation) can each get their own isolated room.
  */
-export function useRealtimeChat(jobId: string, user: AppUser | null): UseRealtimeChatReturn {
+function useRoomChat(roomId: string | null, user: AppUser | null): UseRoomChatReturn {
   const [messages, setMessages] = useState<RealtimeMessage[]>([])
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const roomIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || !roomId) return
     const socket = getSocket()
     if (!socket) return
 
-    const roomId = `job-${jobId}`
     roomIdRef.current = roomId
     const displayName = user.displayName || 'Anonymous'
 
@@ -86,7 +86,7 @@ export function useRealtimeChat(jobId: string, user: AppUser | null): UseRealtim
       setMessages([])
       setOnlineUsers([])
     }
-  }, [user?.id, jobId])
+  }, [user?.id, roomId])
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -103,4 +103,16 @@ export function useRealtimeChat(jobId: string, user: AppUser | null): UseRealtim
   )
 
   return { messages, sendMessage, onlineUsers, isConnected }
+}
+
+/** The main post-acceptance job chat (unchanged from before). */
+export function useRealtimeChat(jobId: string, user: AppUser | null): UseRoomChatReturn {
+  return useRoomChat(`job-${jobId}`, user)
+}
+
+/** A private, per-bid negotiation thread — separate room, so only that bid's two
+ * participants (the customer and that specific worker) share it, even though the bid
+ * amount itself is visible to everyone viewing the job. */
+export function useBidNegotiationChat(bidId: string | null, user: AppUser | null): UseRoomChatReturn {
+  return useRoomChat(bidId ? `bid-${bidId}` : null, user)
 }

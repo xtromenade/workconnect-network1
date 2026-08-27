@@ -8,6 +8,9 @@ import { useBids, useCreateBid, useUpdateBidStatus } from '@/hooks/useBids'
 import { useCall } from '@/context/CallContext'
 import { useReviews, useCreateReview } from '@/hooks/useReviews'
 import { useCustomerStats, useWorkerStats } from '@/hooks/useStats'
+import { usePriceRequests, useCreatePriceRequest, useResolvePriceRequest } from '@/hooks/usePriceRequests'
+import { useCreateNotification } from '@/hooks/useNotifications'
+import { BidNegotiationChat } from '@/components/BidNegotiationChat'
 import { apiTable } from '@/lib/apiTable'
 import type { Wallet, Transaction, Bid, Job } from '@/types'
 import { Button, Input, Textarea, Badge, Card, CardContent, Avatar, AvatarFallback } from '@blinkdotnew/ui'
@@ -29,6 +32,9 @@ import {
   Wallet as WalletIcon,
   Users,
   TrendingUp,
+  PenLine,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -121,6 +127,10 @@ function JobDetailContent({ jobId }: { jobId: string }) {
   const { data: jobReviews } = useReviews(job?.workerId ?? undefined)
   const createReview = useCreateReview()
   const { data: customerStats } = useCustomerStats(job?.customerId)
+  const { data: priceRequests = [] } = usePriceRequests(jobId)
+  const createPriceRequest = useCreatePriceRequest()
+  const resolvePriceRequest = useResolvePriceRequest()
+  const createNotification = useCreateNotification()
 
   const [bidAmount, setBidAmount] = useState('')
   const [bidMessage, setBidMessage] = useState('')
@@ -131,6 +141,11 @@ function JobDetailContent({ jobId }: { jobId: string }) {
   const [reviewRating, setReviewRating] = useState(5)
   const [reviewComment, setReviewComment] = useState('')
   const [submittingReview, setSubmittingReview] = useState(false)
+  const [showPriceForm, setShowPriceForm] = useState(false)
+  const [newAmount, setNewAmount] = useState('')
+  const [priceReason, setPriceReason] = useState('')
+  const [submittingPriceRequest, setSubmittingPriceRequest] = useState(false)
+  const [resolvingPriceRequest, setResolvingPriceRequest] = useState(false)
 
   const bidList = Array.isArray(bids) ? bids : []
   const isCustomer = profile?.role === 'customer'
@@ -144,6 +159,7 @@ function JobDetailContent({ jobId }: { jobId: string }) {
   const myReview = Array.isArray(jobReviews)
     ? jobReviews.find((r) => r.jobId === jobId && r.reviewerId === user?.id)
     : undefined
+  const pendingPriceRequest = priceRequests.find((r) => r.status === 'pending')
 
   if (isLoading) {
     return (
@@ -164,7 +180,7 @@ function JobDetailContent({ jobId }: { jobId: string }) {
 
   const handleSubmitBid = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) return
+    if (!user || !job) return
 
     setSubmittingBid(true)
     try {
@@ -179,6 +195,12 @@ function JobDetailContent({ jobId }: { jobId: string }) {
       setShowBidForm(false)
       setBidAmount('')
       setBidMessage('')
+      createNotification.mutate({
+        userId: job.customerId,
+        title: `New bid on "${job.title}"`,
+        body: `${user.displayName || 'A worker'} bid ${job.currency} ${Number(bidAmount).toLocaleString()}`,
+        link: `/jobs/${jobId}`,
+      })
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to submit bid')
     } finally {
@@ -187,25 +209,45 @@ function JobDetailContent({ jobId }: { jobId: string }) {
   }
 
   const handleAcceptBid = async (bidId: string) => {
+    if (!job) return
     try {
+      const acceptedWorkerId = bidList.find((b) => b.id === bidId)?.workerId ?? null
       await updateBidStatus.mutateAsync({ id: bidId, status: 'accepted' })
       // Update job to mark it in progress
       await updateJob.mutateAsync({
         id: jobId,
         status: 'in_progress',
         acceptedBidId: bidId,
-        workerId: bidList.find((b) => b.id === bidId)?.workerId ?? null,
+        workerId: acceptedWorkerId,
       })
       toast.success('Bid accepted!')
+      if (acceptedWorkerId) {
+        createNotification.mutate({
+          userId: acceptedWorkerId,
+          title: `Your bid was accepted!`,
+          body: `"${job.title}" — you're hired.`,
+          link: `/jobs/${jobId}`,
+        })
+      }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to accept bid')
     }
   }
 
   const handleRejectBid = async (bidId: string) => {
+    if (!job) return
     try {
+      const rejectedWorkerId = bidList.find((b) => b.id === bidId)?.workerId
       await updateBidStatus.mutateAsync({ id: bidId, status: 'rejected' })
       toast.success('Bid rejected')
+      if (rejectedWorkerId) {
+        createNotification.mutate({
+          userId: rejectedWorkerId,
+          title: `Bid declined`,
+          body: `Your bid on "${job.title}" wasn't accepted this time.`,
+          link: `/jobs/${jobId}`,
+        })
+      }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to reject bid')
     }
@@ -213,10 +255,17 @@ function JobDetailContent({ jobId }: { jobId: string }) {
 
   // Worker marks the work finished — job stays "in_progress" until the customer confirms.
   const handleMarkComplete = async () => {
+    if (!job) return
     setMarking(true)
     try {
       await updateJob.mutateAsync({ id: jobId, workerCompletedAt: new Date().toISOString() })
       toast.success('Marked as complete — waiting for the customer to confirm.')
+      createNotification.mutate({
+        userId: job.customerId,
+        title: `"${job.title}" marked complete`,
+        body: 'The worker says this job is done — confirm to close it out.',
+        link: `/jobs/${jobId}`,
+      })
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to mark job complete')
     } finally {
@@ -235,6 +284,12 @@ function JobDetailContent({ jobId }: { jobId: string }) {
       }
       await updateJob.mutateAsync({ id: jobId, status: 'completed', completedAt: new Date().toISOString() })
       toast.success('Job confirmed as complete!')
+      createNotification.mutate({
+        userId: job.workerId,
+        title: `"${job.title}" confirmed complete`,
+        body: 'The customer confirmed the job is done. Nice work!',
+        link: `/jobs/${jobId}`,
+      })
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to confirm completion')
     } finally {
@@ -258,6 +313,70 @@ function JobDetailContent({ jobId }: { jobId: string }) {
       toast.error(err instanceof Error ? err.message : 'Failed to submit review')
     } finally {
       setSubmittingReview(false)
+    }
+  }
+
+  // Worker asks for a different amount once the job's underway — e.g. it turned out
+  // to need more (or less) work than the original bid covered.
+  const handleSubmitPriceRequest = async () => {
+    if (!user || !job || !job.acceptedBidId) return
+    const amount = Number(newAmount)
+    if (!amount || amount <= 0) {
+      toast.error('Enter a valid amount')
+      return
+    }
+    setSubmittingPriceRequest(true)
+    try {
+      await createPriceRequest.mutateAsync({
+        jobId,
+        bidId: job.acceptedBidId,
+        requestedBy: user.id,
+        previousAmount: job.budget,
+        requestedAmount: amount,
+        reason: priceReason,
+      })
+      toast.success('Price change requested — waiting for the customer to review it.')
+      setShowPriceForm(false)
+      setNewAmount('')
+      setPriceReason('')
+      createNotification.mutate({
+        userId: job.customerId,
+        title: `Price change requested for "${job.title}"`,
+        body: `${job.currency} ${job.budget.toLocaleString()} → ${job.currency} ${amount.toLocaleString()}`,
+        link: `/jobs/${jobId}`,
+      })
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit price request')
+    } finally {
+      setSubmittingPriceRequest(false)
+    }
+  }
+
+  // Customer approves or declines the worker's requested amount. Approving updates the
+  // job's actual budget to the new agreed price.
+  const handleResolvePriceRequest = async (status: 'approved' | 'rejected') => {
+    if (!pendingPriceRequest) return
+    setResolvingPriceRequest(true)
+    try {
+      await resolvePriceRequest.mutateAsync({ id: pendingPriceRequest.id, status, jobId })
+      if (status === 'approved') {
+        await updateJob.mutateAsync({ id: jobId, budget: pendingPriceRequest.requestedAmount })
+        toast.success(`Price updated to ${job?.currency} ${pendingPriceRequest.requestedAmount.toLocaleString()}`)
+      } else {
+        toast('Price change declined', { icon: '👍' })
+      }
+      createNotification.mutate({
+        userId: pendingPriceRequest.requestedBy,
+        title: status === 'approved' ? 'Price change approved' : 'Price change declined',
+        body: job
+          ? `"${job.title}" — ${status === 'approved' ? `now ${job.currency} ${pendingPriceRequest.requestedAmount.toLocaleString()}` : 'price stays the same'}`
+          : '',
+        link: `/jobs/${jobId}`,
+      })
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to resolve price request')
+    } finally {
+      setResolvingPriceRequest(false)
     }
   }
 
@@ -367,6 +486,113 @@ function JobDetailContent({ jobId }: { jobId: string }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Price change request — worker can ask for a different amount once the job's
+          underway; customer approves or declines. Only relevant while in progress. */}
+      {job.status === 'in_progress' && job.acceptedBidId && (
+        <>
+          {pendingPriceRequest ? (
+            <Card className="border-amber-300 bg-amber-50/40 dark:bg-amber-950/20">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium flex items-center gap-1.5">
+                      <PenLine className="h-3.5 w-3.5" />
+                      Price change requested
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {job.currency} {pendingPriceRequest.previousAmount.toLocaleString()} →{' '}
+                      <span className="font-semibold text-foreground">
+                        {job.currency} {pendingPriceRequest.requestedAmount.toLocaleString()}
+                      </span>
+                    </p>
+                    {pendingPriceRequest.reason && (
+                      <p className="text-xs text-muted-foreground mt-1.5 italic">"{pendingPriceRequest.reason}"</p>
+                    )}
+                  </div>
+
+                  {isMyJob ? (
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 text-white hover:bg-emerald-700 gap-1.5"
+                        onClick={() => handleResolvePriceRequest('approved')}
+                        disabled={resolvingPriceRequest}
+                      >
+                        {resolvingPriceRequest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        onClick={() => handleResolvePriceRequest('rejected')}
+                        disabled={resolvingPriceRequest}
+                      >
+                        <ThumbsDown className="h-3.5 w-3.5" />
+                        Decline
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1 flex-shrink-0">
+                      <Clock className="h-3.5 w-3.5" />
+                      Awaiting customer
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            isWorker && myBid?.status === 'accepted' && (
+              <Card>
+                <CardContent className="p-4">
+                  {showPriceForm ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium">Request a different price</p>
+                      <Input
+                        type="number"
+                        placeholder={`New amount (currently ${job.currency} ${job.budget.toLocaleString()})`}
+                        value={newAmount}
+                        onChange={(e) => setNewAmount(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                      <Textarea
+                        placeholder="Why does the price need to change? (optional)"
+                        value={priceReason}
+                        onChange={(e) => setPriceReason(e.target.value)}
+                        className="min-h-[60px] text-sm"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleSubmitPriceRequest}
+                          disabled={submittingPriceRequest}
+                          className="bg-accent text-accent-foreground hover:bg-accent/90"
+                        >
+                          {submittingPriceRequest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Send Request'}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setShowPriceForm(false)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-xs text-muted-foreground">
+                        Job needs more (or less) work than the original bid?
+                      </p>
+                      <Button size="sm" variant="outline" className="gap-1.5 flex-shrink-0" onClick={() => setShowPriceForm(true)}>
+                        <PenLine className="h-3.5 w-3.5" />
+                        Request Price Change
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          )}
+        </>
+      )}
 
       {/* Completion handshake — worker marks done, customer confirms */}
       {job.status === 'in_progress' && (isMyJob || (isWorker && myBid?.status === 'accepted')) && (
@@ -573,6 +799,8 @@ function JobDetailContent({ jobId }: { jobId: string }) {
               <BidCard
                 key={bid.id}
                 bid={bid}
+                jobId={jobId}
+                customerId={job.customerId}
                 jobStatus={job.status}
                 isMyJob={isMyJob}
                 showWorkerStats={isMyJob}
@@ -601,6 +829,8 @@ function CompletionRateBadge({ rate }: { rate: number }) {
 
 function BidCard({
   bid,
+  jobId,
+  customerId,
   jobStatus,
   isMyJob,
   showWorkerStats,
@@ -609,6 +839,8 @@ function BidCard({
   actionPending,
 }: {
   bid: Bid
+  jobId: string
+  customerId: string
   jobStatus: Job['status']
   isMyJob: boolean
   showWorkerStats: boolean
@@ -616,7 +848,9 @@ function BidCard({
   onReject: () => void
   actionPending: boolean
 }) {
+  const { user } = useAuth()
   const { data: stats } = useWorkerStats(showWorkerStats ? bid.workerId : undefined)
+  const canNegotiate = isMyJob || user?.id === bid.workerId
 
   return (
     <Card className={bid.status === 'accepted' ? 'border-accent/50' : ''}>
@@ -691,6 +925,12 @@ function BidCard({
               Reject
             </Button>
           </div>
+        )}
+
+        {/* Private negotiation thread — only the customer and this specific bidder see it,
+            even though the bid amount/message above is visible to everyone viewing the job. */}
+        {canNegotiate && bid.status !== 'rejected' && (
+          <BidNegotiationChat bidId={bid.id} jobId={jobId} customerId={customerId} workerId={bid.workerId} />
         )}
       </CardContent>
     </Card>

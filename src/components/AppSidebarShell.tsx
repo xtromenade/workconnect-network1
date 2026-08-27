@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
+import { NotificationBell } from '@/components/NotificationBell'
 
 const SIDEBAR_KEY = 'sidebar_collapsed'
 
@@ -131,8 +132,8 @@ export function AppSidebarShell({
         {/* ── Header: WorkConnect branding ──────────────── */}
         <div
           className={cn(
-            'flex items-center gap-2 shrink-0 border-b border-border h-[52px] px-3',
-            collapsed && 'justify-center px-2',
+            'flex items-center gap-1 shrink-0 border-b border-border h-[52px] px-3',
+            collapsed && 'flex-col justify-center px-2 py-2 h-auto gap-2',
           )}
         >
           {!collapsed && (
@@ -143,6 +144,7 @@ export function AppSidebarShell({
               <span className="flex-1 font-semibold text-sm truncate">WorkConnect</span>
             </>
           )}
+          <NotificationBell collapsed={collapsed} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

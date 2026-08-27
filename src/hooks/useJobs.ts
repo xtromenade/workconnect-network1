@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiTable } from '@/lib/apiTable'
-import type { Job, Profile } from '@/types'
+import type { Job, Profile, Bid } from '@/types'
 
 const jobsTable = () => apiTable<Job>('jobs')
 const profilesTable = () => apiTable<Profile>('profiles')
+const bidsTable = () => apiTable<Bid>('bids')
 
 interface JobFilters {
   status?: string
@@ -32,6 +33,18 @@ async function attachCustomerNames(jobs: Job[]): Promise<Job[]> {
     customerName: nameMap.get(j.customerId)?.name,
     customerAvatar: nameMap.get(j.customerId)?.avatar,
   }))
+}
+
+/** So a customer can see how many bids each of their posted jobs has gotten right on
+ * the job card, without opening each one. */
+async function attachBidCounts(jobs: Job[]): Promise<Job[]> {
+  if (jobs.length === 0) return jobs
+
+  const counts = await Promise.all(
+    jobs.map((j) => bidsTable().list({ where: { jobId: j.id } }).then((bids) => bids.length)),
+  )
+
+  return jobs.map((j, i) => ({ ...j, bidCount: counts[i] }))
 }
 
 export function useJobs(filters?: JobFilters) {
@@ -77,7 +90,8 @@ export function useMyJobs(userId: string | undefined) {
         where: { customerId: userId },
         orderBy: { createdAt: 'desc' },
       })
-      return attachCustomerNames(jobs)
+      const withNames = await attachCustomerNames(jobs)
+      return attachBidCounts(withNames)
     },
     enabled: !!userId,
   })

@@ -76,6 +76,44 @@ One thing specific to this frontend: after deploying, set the `VITE_API_URL` env
 variable in Netlify's dashboard to your deployed backend's URL, then trigger a rebuild (Vite
 bakes env vars in at build time, so this needs a fresh build, not just a page refresh).
 
+## Bid counts at a glance, and account activity notifications
+
+- **Bid counts on posted job cards** — a customer's "Your Recent Jobs" card on the dashboard
+  now shows how many bids each job has received directly on the card (e.g. "3 bids"), with a
+  highlighted border on open jobs that have pending bids — no need to open each job to check.
+  `useMyJobs` enriches each job with a live count via the `bids` table.
+- **Notification bell** — a bell icon with an unread badge lives in the sidebar header,
+  visible on every page for both workers and customers. Clicking it opens recent activity
+  with click-to-navigate and a "mark all read" option. It's wired into every meaningful
+  lifecycle event: new bid submitted, bid accepted/rejected, worker marks a job complete,
+  customer confirms completion, price change requested, and price change approved/declined.
+  Notifications push live over the socket connection the moment they're created (not just on
+  page refresh) — the backend's generic records API emits a `notification:new` event to the
+  target user's room whenever a row is created in the `notifications` table specifically.
+
+## Negotiating during bidding, and price changes after acceptance
+
+Two more pieces on the job detail page:
+
+- **Per-bid negotiation chat** — each bid on a job has its own private "Discuss this bid"
+  thread, expandable inline on the bid card. Only the customer and that specific bidder can
+  see and use it — other workers who've also bid on the same job (bid amounts are visible to
+  everyone, matching how the marketplace already worked) don't see this conversation. Built
+  the same way the main post-acceptance chat works: Socket.io for live delivery, REST
+  (`bidMessages` table) for persistence — just scoped to a `bid-<id>` room instead of
+  `job-<id>`, so it doesn't interfere with the main chat.
+- **Price change requests** — once a bid's accepted, the worker can request a different
+  amount (found extra work, or less than expected) with an optional reason. The customer sees
+  it as an approve/decline card; approving updates the job's actual budget to the new amount
+  immediately, declining leaves it untouched. Only one request can be pending at a time per
+  job — the "Request Price Change" button doesn't reappear for the worker until the current
+  one's resolved. Full history is kept (`priceRequests` table), even after resolution.
+
+I tested both directly against the backend before shipping: a full negotiation exchange over
+the isolated `bid-<id>` socket room, then a bid accepted at ₦3,000 → worker requests ₦4,500
+with a reason → customer approves → job budget updates to ₦4,500, then a second request for
+₦6,000 that gets declined and correctly leaves the budget at ₦4,500.
+
 ## Track record at the point of bidding
 
 On the job detail page, each side sees the other's history before committing:
