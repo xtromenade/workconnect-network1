@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiTable } from '@/lib/apiTable'
-import type { Bid, Profile } from '@/types'
+import type { Bid, Profile, Job } from '@/types'
 
 const bidsTable = () => apiTable<Bid>('bids')
 const profilesTable = () => apiTable<Profile>('profiles')
+const jobsTable = () => apiTable<Job>('jobs')
 
 async function attachWorkerProfiles(bids: Bid[]): Promise<Bid[]> {
   if (bids.length === 0) return bids
@@ -32,6 +33,27 @@ async function attachWorkerProfiles(bids: Bid[]): Promise<Bid[]> {
   })
 }
 
+/** So a worker can tell whether an accepted bid's job is still active or already closed
+ * out — without this, "accepted" alone can't distinguish a job in progress from one
+ * that was confirmed complete weeks ago. */
+async function attachJobInfo(bids: Bid[]): Promise<Bid[]> {
+  if (bids.length === 0) return bids
+
+  const jobIds = [...new Set(bids.map((b) => b.jobId))]
+  const jobs = await Promise.all(jobIds.map((id) => jobsTable().get(id)))
+  const jobMap = new Map(jobs.filter(Boolean).map((j) => [j!.id, j!]))
+
+  return bids.map((b) => {
+    const job = jobMap.get(b.jobId)
+    return {
+      ...b,
+      jobTitle: job?.title,
+      jobStatus: job?.status,
+      jobWorkerCompletedAt: job?.workerCompletedAt ?? null,
+    }
+  })
+}
+
 export function useBids(jobId: string | undefined) {
   return useQuery({
     queryKey: ['bids', jobId],
@@ -56,7 +78,8 @@ export function useMyBids(workerId: string | undefined) {
         where: { workerId },
         orderBy: { createdAt: 'desc' },
       })
-      return attachWorkerProfiles(bids)
+      const withProfiles = await attachWorkerProfiles(bids)
+      return attachJobInfo(withProfiles)
     },
     enabled: !!workerId,
   })

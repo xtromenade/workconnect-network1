@@ -127,6 +127,7 @@ export function useUpdateJob() {
     onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
       queryClient.invalidateQueries({ queryKey: ['job', variables.id] })
+      queryClient.invalidateQueries({ queryKey: ['bids'] })
     },
   })
 }

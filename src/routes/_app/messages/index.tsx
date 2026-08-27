@@ -44,10 +44,11 @@ function MessagesContent() {
   const conversationJobs = useMemo(() => {
     const jobIds = new Set<string>()
 
-    // Customer side: their jobs that are in_progress (have accepted bids)
+    // Customer side: jobs they've hired someone for, whether still in progress or
+    // already completed — conversation history shouldn't disappear once a job closes.
     if (profile?.role === 'customer') {
       jobList
-        .filter((j) => j.acceptedBidId && j.status === 'in_progress')
+        .filter((j) => j.acceptedBidId && (j.status === 'in_progress' || j.status === 'completed'))
         .forEach((j) => jobIds.add(j.id))
     }
 

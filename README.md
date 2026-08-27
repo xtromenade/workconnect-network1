@@ -76,6 +76,24 @@ One thing specific to this frontend: after deploying, set the `VITE_API_URL` env
 variable in Netlify's dashboard to your deployed backend's URL, then trigger a rebuild (Vite
 bakes env vars in at build time, so this needs a fresh build, not just a page refresh).
 
+## Completed jobs actually close out for the worker
+
+Fixed a bug where the dashboard's "Active Jobs" count and list only checked whether a
+worker's *bid* was accepted — not whether the *job itself* was still in progress. Since a
+bid's status never changes back after acceptance, a job the customer had already confirmed
+complete weeks ago was still counting as "active" forever.
+
+Now `useMyBids` joins in the underlying job's status, so:
+- **Active Jobs** only counts bids where the job is still `in_progress` (and shows "Awaiting
+  confirmation" instead of "Active" once the worker's marked it done but the customer hasn't
+  confirmed yet).
+- **Completed Jobs** is a new, separate count — once the customer confirms, the job moves out
+  of the active list and into its own "Completed Jobs" section, so the count is still
+  browsable, not just a number.
+- Message history for a completed job stays visible to the customer too (previously it
+  vanished the moment a job closed) — only the *active-jobs* view should hide completed work,
+  not the conversation history.
+
 ## Bid counts at a glance, and account activity notifications
 
 - **Bid counts on posted job cards** — a customer's "Your Recent Jobs" card on the dashboard

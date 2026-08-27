@@ -53,6 +53,9 @@ export interface Bid {
   workerName?: string
   workerAvatar?: string
   workerSkills?: string
+  jobTitle?: string
+  jobStatus?: 'open' | 'in_progress' | 'completed' | 'cancelled'
+  jobWorkerCompletedAt?: string | null
 }
 
 export interface Message {

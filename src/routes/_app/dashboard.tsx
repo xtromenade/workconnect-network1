@@ -72,7 +72,8 @@ function DashboardContent() {
 
   // Worker stats
   const bidsSubmitted = bidList.length
-  const activeJobs = bidList.filter((b) => b.status === 'accepted').length
+  const activeJobs = bidList.filter((b) => b.status === 'accepted' && b.jobStatus === 'in_progress').length
+  const completedJobs = bidList.filter((b) => b.status === 'accepted' && b.jobStatus === 'completed').length
   const pendingBids = bidList.filter((b) => b.status === 'pending').length
 
   // Customer stats
@@ -106,6 +107,12 @@ function DashboardContent() {
               icon={<CheckCircle2 className="h-4 w-4" />}
               label="Active Jobs"
               value={activeJobs}
+              loading={bidsLoading}
+            />
+            <StatCard
+              icon={<CheckCircle2 className="h-4 w-4" />}
+              label="Completed Jobs"
+              value={completedJobs}
               loading={bidsLoading}
             />
             <StatCard
@@ -213,13 +220,13 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* Active jobs (where bid was accepted) */}
-            {bidList.filter((b) => b.status === 'accepted').length > 0 && (
+            {/* Active jobs — bid accepted AND the job itself hasn't been confirmed complete yet */}
+            {bidList.filter((b) => b.status === 'accepted' && b.jobStatus === 'in_progress').length > 0 && (
               <div className="mt-8 space-y-4">
                 <h2 className="font-semibold text-base">Your Active Jobs</h2>
                 <div className="space-y-3">
                   {bidList
-                    .filter((b) => b.status === 'accepted')
+                    .filter((b) => b.status === 'accepted' && b.jobStatus === 'in_progress')
                     .map((bid) => (
                       <Link
                         key={bid.id}
@@ -229,14 +236,54 @@ function DashboardContent() {
                       >
                         <Card className="hover:shadow-sm transition-shadow border-l-4 border-l-accent cursor-pointer">
                           <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h3 className="font-medium text-sm">Job #{bid.jobId.slice(0, 8)}</h3>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <h3 className="font-medium text-sm truncate">{bid.jobTitle || `Job #${bid.jobId.slice(0, 8)}`}</h3>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                   Your bid: {bid.amount.toLocaleString()} — Accepted
                                 </p>
                               </div>
-                              <Badge className="bg-accent text-accent-foreground">Active</Badge>
+                              {bid.jobWorkerCompletedAt ? (
+                                <Badge variant="secondary" className="shrink-0">Awaiting confirmation</Badge>
+                              ) : (
+                                <Badge className="bg-accent text-accent-foreground shrink-0">Active</Badge>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Completed jobs — closed out, kept here so the count above is browsable */}
+            {bidList.filter((b) => b.status === 'accepted' && b.jobStatus === 'completed').length > 0 && (
+              <div className="mt-8 space-y-4">
+                <h2 className="font-semibold text-base">Completed Jobs</h2>
+                <div className="space-y-3">
+                  {bidList
+                    .filter((b) => b.status === 'accepted' && b.jobStatus === 'completed')
+                    .map((bid) => (
+                      <Link
+                        key={bid.id}
+                        to="/jobs/$jobId"
+                        params={{ jobId: bid.jobId }}
+                        className="block"
+                      >
+                        <Card className="hover:shadow-sm transition-shadow cursor-pointer opacity-80">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <h3 className="font-medium text-sm truncate">{bid.jobTitle || `Job #${bid.jobId.slice(0, 8)}`}</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  Your bid: {bid.amount.toLocaleString()} — Paid
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="shrink-0 gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Completed
+                              </Badge>
                             </div>
                           </CardContent>
                         </Card>
